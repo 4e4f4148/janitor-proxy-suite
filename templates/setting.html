@@ -3,45 +3,60 @@
 {% block content %}
 <h1>{% block title %} Parameter Settings {% endblock %}</h1>
     <form method="POST">
-        <div>
-
-            <label for="instruct">Instruct preset</label>
-        <select name="instruct" id="instruct">
-            <option value="alpaca" {% if web_param['instruct'] == 'alpaca' %}selected{% endif %}>alpaca</option>
-            <option value="vicuna" {% if web_param['instruct'] == 'vicuna' %}selected{% endif %}>vicuna</option>
-            <option value="llama-3" {% if web_param['instruct'] == 'llama-3' %}selected{% endif %}>llama-3</option>
-            <option value="chatml" {% if web_param['instruct'] == 'chatml' %}selected{% endif %}>chatml</option>
-            <option value="command-r" {% if web_param['instruct'] == 'command-r' %}selected{% endif %}>command-r</option>
-            <option value="mistral" {% if web_param['instruct'] == 'mistral' %}selected{% endif %}>mistral</option>
-            <option value="gemma2" {% if web_param['instruct'] == 'gemma2' %}selected{% endif %}>gemma2</option>
-        </select>
-        <br>
-        <label for="top_p">Top P</label>
-        <input name="top_p" type="range" min="0" max="1" value="{{web_param['top_p']}}" step="0.01" id="top_p" class="slider">
-        <span  class="sliderValue"></span>
-        <br>
-        <label for="min_p">Min P</label>
-        <input name="min_p" type="range" min="0" max="1" value="{{web_param['min_p']}}" step="0.01" id="min_p" class="slider">
-        <span  class="sliderValue"></span>
-        <br>
-        <label for="top_k">Top K</label>
-        <input name="top_k" type="range" min="-1" max="100" value="{{web_param['top_k']}}" id="top_k" class="slider">
-        <span  class="sliderValue"></span>
-        <br>
-        <label for="rep_pen">Repetition penalty</label>
-        <input name="rep_pen" type="range" min="1" max="3" value="{{web_param['repetition_penalty']}}" step="0.01" id="rep_pen" class="slider">
-        <span  class="sliderValue"></span>
-        <br>
-        <label for="freq_pen">Frequency penalty</label>
-        <input name="freq_pen" type="range" min="-2" max="2" value="{{web_param['frequency_penalty']}}" step="0.01" id="freq_pen" class="slider">
-        <span  class="sliderValue"></span>
-        <br>
-        <label for="pres_pen">Presence penalty</label>
-        <input name="pres_pen" type="range" min="-2" max="2" value="{{web_param['presence_penalty']}}" step="0.01" id="pres_pen" class="slider">
-        <span  class="sliderValue"></span>
-        <br>
-        <button type="submit" value="Submit">Submit</button>
+        <div class="row">
+            <div class="column">
+                <label for="instruct">Instruct preset</label> <br>
+                <label for="top_p">Top P</label><br>
+                <label for="min_p">Min P</label><br>
+                <label for="top_k">Top K</label><br>
+                <label for="rep_pen">Repetition penalty</label><br>
+                <label for="freq_pen">Frequency penalty</label><br>
+                <label for="pres_pen">Presence penalty</label><br>
+            </div>
+            <div class="column">
+                <select name="instruct" id="instruct">
+                    <option value="alpaca" {% if web_param['instruct'] == 'alpaca' %}selected{% endif %}>alpaca</option>
+                    <option value="vicuna" {% if web_param['instruct'] == 'vicuna' %}selected{% endif %}>vicuna</option>
+                    <option value="llama-3" {% if web_param['instruct'] == 'llama-3' %}selected{% endif %}>llama-3</option>
+                    <option value="chatml" {% if web_param['instruct'] == 'chatml' %}selected{% endif %}>chatml</option>
+                    <option value="command-r" {% if web_param['instruct'] == 'command-r' %}selected{% endif %}>command-r</option>
+                    <option value="mistral" {% if web_param['instruct'] == 'mistral' %}selected{% endif %}>mistral</option>
+                    <option value="gemma2" {% if web_param['instruct'] == 'gemma2' %}selected{% endif %}>gemma2</option>
+                </select>
+                <br>
+                <input name="top_p" type="range" min="0" max="1" value="{{web_param['top_p']}}" step="0.01" id="top_p" class="slider">
+                <span  class="sliderValue"></span>
+                <br>
+                <input name="min_p" type="range" min="0" max="1" value="{{web_param['min_p']}}" step="0.01" id="min_p" class="slider">
+                <span  class="sliderValue"></span>
+                <br>
+                <input name="top_k" type="range" min="-1" max="100" value="{{web_param['top_k']}}" id="top_k" class="slider">
+                <span  class="sliderValue"></span>
+                <br>
+                <input name="rep_pen" type="range" min="1" max="3" value="{{web_param['repetition_penalty']}}" step="0.01" id="rep_pen" class="slider">
+                <span  class="sliderValue"></span>
+                <br>
+                <input name="freq_pen" type="range" min="-2" max="2" value="{{web_param['frequency_penalty']}}" step="0.01" id="freq_pen" class="slider">
+                <span  class="sliderValue"></span>
+                <br>
+                <input name="pres_pen" type="range" min="-2" max="2" value="{{web_param['presence_penalty']}}" step="0.01" id="pres_pen" class="slider">
+                <span  class="sliderValue"></span>
+        
+                <br>
+                <br>
+        
+            </div>
         </div>
+        <div #prefill style="width: 100%;">
+            <label for="prefill_enabled">Assistant prefill</label>
+        <input name="prefill_enabled" id="prefill_enabled" type="checkbox" {% if web_param['prefill_enabled'] %}checked{% endif %} value="1" onchange="toggleTextarea()">
+        <br>
+        <textarea name="prefill_string" style="width: 100%;" type="text"  value="{{web_param['prefill_string']}}" id="prefill_string" {% if not web_param['prefill_enabled'] %}disabled{% endif %}>{{web_param['prefill_string']}}</textarea>
+        </div>
+        
+        <br>
+
+        <button type="submit" value="Submit">Submit</button>
         
     </form>
 
@@ -64,5 +79,16 @@
                 }
             });
     
+    function toggleTextarea() {
+        const checkbox = document.getElementById("prefill_enabled");
+        const textarea = document.getElementById("prefill_string");
+        textarea.disabled = !checkbox.checked;
+    }
+
+    // Ensure proper state on page load
+    document.addEventListener("DOMContentLoaded", () => {
+        toggleTextarea();
+    });
+            
     </script>
 {% endblock %}
