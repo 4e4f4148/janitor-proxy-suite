@@ -4,8 +4,8 @@
 <h1>{% block title %} Parameter Settings {% endblock %}</h1>
     <form method="POST">
         <div class="row">
-            <div class="column">
-                <label for="instruct">Instruct preset</label> <br>
+            <div class="column" style="width: 25%;">
+                <label for="instruct">Instruct preset</label> <br style="margin-bottom: 5px;">
                 <label for="top_p">Top P</label><br>
                 <label for="min_p">Min P</label><br>
                 <label for="top_k">Top K</label><br>
@@ -13,7 +13,7 @@
                 <label for="freq_pen">Frequency penalty</label><br>
                 <label for="pres_pen">Presence penalty</label><br>
             </div>
-            <div class="column">
+            <div class="column"  style="width: 75%;">
                 <select name="instruct" id="instruct">
                     <option value="alpaca" {% if web_param['instruct'] == 'alpaca' %}selected{% endif %}>alpaca</option>
                     <option value="vicuna" {% if web_param['instruct'] == 'vicuna' %}selected{% endif %}>vicuna</option>
