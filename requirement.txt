@@ -1,3 +1,4 @@
 requests
-flask
+flask==2.3.1
 flask_cors
+anthropic
