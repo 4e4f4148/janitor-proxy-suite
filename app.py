@@ -168,10 +168,9 @@ def formatToClaude(mlist):
     # print(formattedContents)
     return formattedContents
 
-def configBuilder(request, endpoint_url, mlist = 'request'):
+def configBuilder(request, endpoint_url, mlist = 'request', body_params = {'transforms': ["middle-out"]}):
     if mlist == 'request':
         mlist = request.json['messages']
-    body_params = {'transforms': ["middle-out"]}
     if("stream" not in request.json):
         request.json['stream'] = False
     api_key_openai = request.headers.get('Authorization')
@@ -190,7 +189,6 @@ def configBuilder(request, endpoint_url, mlist = 'request'):
         'HTTP-Referer': 'https://janitorai.com/'
     },
     'json': {
-        'messages': mlist,
         'model': request.json.get('model', ''),  # Replace with your desired model
         'temperature': request.json.get('temperature', 0.9),
         'max_tokens': request.json.get('max_tokens', 2048),
@@ -201,6 +199,9 @@ def configBuilder(request, endpoint_url, mlist = 'request'):
         'repetition_penalty':  web_param["repetition_penalty"],
         'presence_penalty': web_param["presence_penalty"],
         'frequency_penalty': web_param["frequency_penalty"],
+        "skip_special_tokens": True, #fixed
+        "n": 1, #fixed
+        "best_of": 1, #fixed
         # 'stop': request.json.get('stop'),
         # 'logit_bias': request.json.get('logit_bias', {}),
         **body_params,
@@ -248,6 +249,37 @@ def arliStream(config):
                     if text != "data: [DONE]":
                         newtext = json.loads(text[6:])
                         if("choices" in newtext):
+                            newtext["choices"][0]["delta"] = {
+                                "content" : newtext["choices"][0]["text"]
+                            }
+                        else:
+                          print(text)
+                        text = "data: " + json.dumps(newtext)
+                    yield f"{text}\n\n"
+                    # Sleep for 2 seconds before sending the next message
+                    time.sleep(0.02)
+    except requests.exceptions.RequestException as error:
+        if error.response and error.response.status_code == 429:
+            print(error.response)
+            return jsonify(status=False, error="out of quota"), 400
+        else:
+            print(error)
+            return jsonify(error=True)
+
+def inferStream(config):
+    try:
+        print("begin text stream")
+        with requests.post(**config, stream=True) as response:
+            response.raise_for_status()  # Ensure the request was successful
+            for line in response.iter_lines():
+                if line:
+                    # Decode the line and yield as a server-sent event
+                    text = line.decode('utf-8')
+                    # print(text)
+                    if text != "data: [DONE]":
+                        newtext = json.loads(text[6:])
+                        if("choices" in newtext):
+                          if("finish_reason" not in newtext["choices"][0]):
                               newtext["choices"][0]["delta"] = {
                                   "content" : newtext["choices"][0]["text"]
                               }
@@ -579,6 +611,38 @@ def handleArliRequest():
             return Response(stream_with_context(arliStream(config)), content_type='text/event-stream')
         else:
             return normalGeneration(config)
+
+@app.route('/infermatic', methods=['GET','POST'])
+def handleInferRequest():
+    if request.method == 'GET':
+        return "This link is not meant to be open. Use this as api url"
+    else:
+        body = request.json
+        endpoint_url = "https://api.totalgpt.ai/v1/completions"
+        formattedMessage = messageFlattener(body["messages"])
+        config = configBuilder(request, endpoint_url, formattedMessage, {})
+        config['json']['prompt'] = formattedMessage
+        if body.get("stream", False) == True:
+            return Response(stream_with_context(inferStream(config)), content_type='text/event-stream')
+        else:
+            return normalGeneration(config)
+
+@app.route('/featherless', methods=['GET','POST'])
+def handleFeatherlessRequest():
+    if request.method == 'GET':
+        return "This link is not meant to be open. Use this as api url"
+    else:
+        body = request.json
+        endpoint_url = "https://api.featherless.ai/v1/completions"
+        formattedMessage = messageFlattener(body["messages"])
+        config = configBuilder(request, endpoint_url, formattedMessage, {})
+        config['json']['prompt'] = formattedMessage
+        print(config)
+        if body.get("stream", False) == True:
+            return Response(stream_with_context(arliStream(config)), content_type='text/event-stream')
+        else:
+            return normalGeneration(config)
+
 
 
 if __name__ == '__main__':
