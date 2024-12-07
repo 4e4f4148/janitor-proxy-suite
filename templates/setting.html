@@ -4,7 +4,7 @@
 <h1>{% block title %} Parameter Settings {% endblock %}</h1>
     <form method="POST">
         <div class="row">
-            <div class="column" style="width: 25%;">
+            <div class="column" style="width: 20%;">
                 <label for="instruct">Instruct preset</label> <br style="margin-bottom: 5px;">
                 <label for="top_p">Top P</label><br>
                 <label for="min_p">Min P</label><br>
@@ -13,7 +13,7 @@
                 <label for="freq_pen">Frequency penalty</label><br>
                 <label for="pres_pen">Presence penalty</label><br>
             </div>
-            <div class="column"  style="width: 75%;">
+            <div class="column"  style="width: 80%;">
                 <select name="instruct" id="instruct">
                     <option value="alpaca" {% if web_param['instruct'] == 'alpaca' %}selected{% endif %}>alpaca</option>
                     <option value="vicuna" {% if web_param['instruct'] == 'vicuna' %}selected{% endif %}>vicuna</option>
@@ -41,20 +41,52 @@
                 <br>
                 <input name="pres_pen" type="range" min="-2" max="2" value="{{web_param['presence_penalty']}}" step="0.01" id="pres_pen" class="slider">
                 <span  class="sliderValue"></span>
-        
-                <br>
-                <br>
-        
+                <br>        
             </div>
         </div>
+        <div #banned_string>
+            <label for="banned_strings">Banned string</label> <br>
+            <textarea name="banned_strings" style="width: 100%;" type="text"  value="{{web_param['banned_strings']}}" id="banned_strings">{{web_param['banned_strings']}}</textarea>    
+        </div>
+        <br>
         <div #prefill style="width: 100%;">
             <label for="prefill_enabled">Assistant prefill</label>
-        <input name="prefill_enabled" id="prefill_enabled" type="checkbox" {% if web_param['prefill_enabled'] %}checked{% endif %} value="1" onchange="toggleTextarea()">
+        <input name="prefill_enabled" id="prefill_enabled" type="checkbox" {% if web_param['prefill_enabled'] %}checked{% endif %} value="1" onchange="togglePrefill()">
         <br>
         <textarea name="prefill_string" style="width: 100%;" type="text"  value="{{web_param['prefill_string']}}" id="prefill_string" {% if not web_param['prefill_enabled'] %}disabled{% endif %}>{{web_param['prefill_string']}}</textarea>
         </div>
         
         <br>
+        <label for="dry_enabled">Dry sampling</label>
+        <input name="dry_enabled" id="dry_enabled" type="checkbox" {% if web_param['dry_enabled'] %}checked{% endif %} value="1" onchange="toggleDry()">
+        <br>
+        <div class="row">
+            <div class="column" style="width: 20%;">
+                <label for="dry_multiplier">Dry multiplier</label><br>
+                <label for="dry_base">Dry base</label><br>
+                <label for="dry_allowed_length">Dry allowed length</label><br>
+                <label for="dry_range">Dry range</label><br>
+            </div>
+            <div class="column" style="width: 80%;">
+                <input name="dry_multiplier" type="range" min="0" max="5" value="{{web_param['dry_multiplier']}}" step="0.01" id="dry_multiplier" class="slider">
+                <span  class="sliderValue"></span><br>
+                <input name="dry_base" type="range" min="1" max="4" value="{{web_param['dry_base']}}" step="0.01" id="dry_base" class="slider">
+                <span  class="sliderValue"></span><br>
+                <input name="dry_allowed_length" type="range" min="1" max="20" value="{{web_param['dry_allowed_length']}}" step="1" id="dry_allowed_length" class="slider">
+                <span  class="sliderValue"></span><br>
+                <input name="dry_range" type="text" min="1" max="204800" value="{{web_param['dry_range']}}" id="dry_range"><br>
+                </div>
+            </div>
+            <label for="dry_sequence_breaker_ids">Dry sequence breaker</label>
+            <textarea name="dry_sequence_breaker_ids" style="width: 100%;" type="text"  value="{{web_param['dry_sequence_breaker_ids']}}" id="dry_sequence_breaker_ids" {% if not web_param['dry_enabled'] %}disabled{% endif %}>{{web_param['dry_sequence_breaker_ids']}}</textarea>
+        </div>
+
+
+
+
+
+
+
 
         <button type="submit" value="Submit">Submit</button>
         
@@ -79,15 +111,25 @@
                 }
             });
     
-    function toggleTextarea() {
+    function togglePrefill() {
         const checkbox = document.getElementById("prefill_enabled");
         const textarea = document.getElementById("prefill_string");
         textarea.disabled = !checkbox.checked;
     }
 
+    function toggleDry() {
+        const checkbox = document.getElementById("dry_enabled");
+        const disabledElement = ["dry_multiplier","dry_base", "dry_allowed_length", "dry_range", "dry_sequence_breaker_ids"]
+        for (let i in disabledElement){
+            const temp = document.getElementById(disabledElement[i]);
+            temp.disabled = !checkbox.checked;
+        }
+    }
+
     // Ensure proper state on page load
     document.addEventListener("DOMContentLoaded", () => {
-        toggleTextarea();
+        togglePrefill();
+        toggleDry();
     });
             
     </script>
