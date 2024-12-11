@@ -546,6 +546,7 @@ def handleOpenrouterChatCompletions():
     if not request.json:
         return jsonify(error=True), 400
     ## Check if this is test message
+    
     if(request.json["messages"][0]["content"] == "Just say TEST"):
         return testobj
     ## Check if Api key valid
@@ -555,6 +556,7 @@ def handleOpenrouterChatCompletions():
     ## Being chat completions, no text
     config = configBuilder(request, endpoint_url)
     print(config)
+    config["json"]["messages"] = request.json["messages"]
     try:
         if(config['json']['stream'] == True):
             return Response(stream_with_context(stream_or_cc(config)), content_type='text/event-stream')
