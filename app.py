@@ -617,6 +617,10 @@ def handleInferRequest():
         formattedMessage = messageFlattener(body["messages"])
         config = configBuilder(request, endpoint_url, formattedMessage, {})
         config['json']['prompt'] = formattedMessage
+        ## not support banned string
+        del config['json']['banned_strings']
+        del config['json']['sampler_order']
+
         if body.get("stream", False) == True:
             return Response(stream_with_context(inferStream(config)), content_type='text/event-stream')
         else:
