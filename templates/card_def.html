@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    
+    <h2>{{card_data["name"]}}</h2>
+
+    <div>
+        <h3>Personality</h3>
+        {{card_data["personality"]}}
+    </div>
+    <div>
+        <h3>Scenario</h3>
+        {{card_data["scenario"]}}
+    </div>
+    <div>
+        <h3>Bot definition</h3>
+        {{card_data["description"]}}
+    </div>
+    <div>
+        <h3>Example messages</h3>
+        {{card_data["mes_example"]}}
+    </div>
+    <div>
+        <h3>First Message</h3>
+        {{card_data["first_mes"]}}
+    </div>
+    <a href="{{ url_for('download_card') }}" download="data.json">
+        <button>
+            Save as tavern json
+        </button>
+    </a>
+    <script>
+            
+    </script>
+{% endblock %}

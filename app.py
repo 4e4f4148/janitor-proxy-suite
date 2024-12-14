@@ -4,6 +4,7 @@ import requests
 import time
 import json
 import anthropic
+import re
 PORT = 5000
 
 app = Flask(__name__)
@@ -92,6 +93,8 @@ premade_instruct = {
       "assistant_end": "<end_of_turn>\n"
     }
 }
+
+card_data = {}
 
 web_param = {
         "instruct": "chatml",
@@ -257,6 +260,114 @@ def trim_to_end_sentence(input_str, include_newline=False):
 def autoTrim(text):
     text = trim_to_end_sentence(text)
     return text
+
+def extract_persona_name(content, persona_index=0):
+    """
+    Extracts the name from the nth occurrence (0-based) of "'s Persona:".
+    Returns the name or empty string if not found.
+    """
+    persona_matches = list(re.finditer(r"'s Persona:", content))
+    if len(persona_matches) <= persona_index:
+        return ""
+
+    persona_idx = persona_matches[persona_index].start()
+    line_start_idx = content.rfind('\n', 0, persona_idx)
+    if line_start_idx == -1:
+        line_start_idx = 0
+    else:
+        line_start_idx += 1
+
+    line_end_idx = persona_idx  # before "'s Persona:"
+    line_text = content[line_start_idx:line_end_idx].strip()
+    return line_text
+
+def extract_card_data(messages):
+    content0 = messages[0]["content"]
+    content1 = messages[1]["content"]
+
+    # Extract user and character names:
+    # User name from first occurrence of "'s Persona:"
+    user_name = extract_persona_name(content0, 0)
+    # Character name from second occurrence of "'s Persona:"
+    char_name = extract_persona_name(content0, 1)
+
+    # Now extract description, scenario, mes_example based on previously implemented logic
+    persona_matches = list(re.finditer(r"'s Persona:", content0))
+    if len(persona_matches) < 2:
+        # Not enough occurrences for char_name-based extraction
+        # Set defaults and do only user replacements if user_name found
+        name = char_name  # might be empty if not found
+        description = ""
+        scenario = ""
+        mes_example = ""
+    else:
+        second_persona_idx = persona_matches[1].start()
+        # The char_name we got is from second occurrence line_text
+        name = char_name
+
+        start_desc = second_persona_idx + len("'s Persona:")
+        remaining = content0[start_desc:]
+
+        scenario_marker = re.search(r"Scenario of the roleplay:", remaining)
+        example_marker = re.search(r"Example conversations between", remaining)
+
+        end_idx = len(remaining)
+        if scenario_marker:
+            end_idx = min(end_idx, scenario_marker.start())
+        if example_marker:
+            end_idx = min(end_idx, example_marker.start())
+
+        description = remaining[:end_idx].strip()
+
+        scenario = ""
+        if scenario_marker:
+            scenario_start = scenario_marker.end()
+            scenario_remaining = remaining[scenario_start:]
+            example_in_scenario_marker = re.search(r"Example conversations between", scenario_remaining)
+            scenario_end = len(scenario_remaining)
+            if example_in_scenario_marker:
+                scenario_end = example_in_scenario_marker.start()
+            scenario = scenario_remaining[:scenario_end].strip()
+
+        mes_example = ""
+        if example_marker:
+            example_start = example_marker.start()
+            raw_example_str = remaining[example_start:].lstrip()
+            # Remove the prefix line up to the colon
+            colon_idx = raw_example_str.find(':')
+            if colon_idx != -1:
+                mes_example = raw_example_str[colon_idx+1:].strip()
+            else:
+                mes_example = raw_example_str.strip()
+
+    personality = ""
+    first_mes = content1
+
+    card_data = {
+        "name": name,
+        "first_mes": first_mes,
+        "description": description,
+        "personality": personality,
+        "mes_example": mes_example,
+        "scenario": scenario
+    }
+
+    # Perform replacements of user and char names:
+    # Replace user_name with {{user}}
+    # Replace char_name with {{char}}
+    # Only do replacements if the respective names are not empty
+    def safe_replace(text, old, new):
+        return text.replace(old, new) if old else text
+
+    for field in card_data:
+        if field != "name":  # Exclude the "name" field
+          # Replace user first, then char
+          val = card_data[field]
+          val = safe_replace(val, user_name, "{{user}}")
+          val = safe_replace(val, char_name, "{{char}}")
+          card_data[field] = val
+
+    return card_data
 
 ## generation function
 
@@ -472,7 +583,7 @@ def claudeNormalOperation(request, model):
         returnmessage = f"{returner['message']}"
         return Response(returnmessage, status=400)
 
-## === Path ===
+## === Pages ===
 
 @app.route('/models')
 def modelcheck():
@@ -526,6 +637,14 @@ def setting():
         return redirect(url_for('index'))
     return render_template('setting.html', web_param=web_param)
 
+@app.route('/definition', methods=('GET', 'POST'))
+def card_definition():
+    return render_template('card_def.html', card_data=card_data)
+    
+@app.route('/definition/json', methods=('GET', 'POST'))
+def download_card():
+    return jsonify(card_data)
+
 @app.route('/', methods=['GET','POST'])
 def index():
     global web_param
@@ -537,6 +656,7 @@ def index():
         web_param["kobold_url"] = request.form['kobold_url']
         return redirect(url_for('index'))
 
+## === Path ===
 @app.route('/openrouter-cc', methods=['GET','POST'])
 def handleOpenrouterChatCompletions():
     if request.method == 'GET':
@@ -656,6 +776,8 @@ def handleKoboldRequest():
         config = configBuilder(request, endpoint_url)
         config["json"]["messages"] = body["messages"]
         print(config)
+        global card_data
+        card_data = extract_card_data(body["messages"])
         if body.get("stream", False) == True:
             return Response(stream_with_context(inferStream(config)), content_type='text/event-stream')
         else:
