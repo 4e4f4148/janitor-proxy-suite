@@ -3,7 +3,6 @@ from flask_cors import CORS
 import requests
 import time
 import json
-import anthropic
 import re
 PORT = 5000
 
@@ -166,7 +165,6 @@ def formatToClaude(mlist):
             temprole = "user"
         else:
             temprole = "assistant"
-        # print(f"{temprole == oldtemprole} {temprole} {oldtemprole}")
         if temprole == oldtemprole:
             formattedContents[-1]["content"] = (
                 formattedContents[-1]["content"] + "\n" + mlist[i]["content"]
@@ -175,10 +173,9 @@ def formatToClaude(mlist):
             formattedContents.append({"content": mlist[i]["content"], "role": temprole})
         oldtemprole = temprole
     if formattedContents[-1]["role"] == "user":
-        formattedContents.append({"content": web_param['prefill_string'] if web_param['prefill_enabled'] == True else '', "role": "assistant"})
+        formattedContents.append({"content": web_param['prefill_string'], "role": "assistant"})
     else:
-        formattedContents[-1]["content"] += "\n" + web_param['prefill_string'] if web_param['prefill_enabled'] == True else ''
-    # print(formattedContents)
+        formattedContents[-1]["content"] += "\n" + web_param['prefill_string']
     return formattedContents
 
 def configBuilder(request, endpoint_url, mlist = 'request', body_params = {'transforms': ["middle-out"]}):
@@ -226,8 +223,6 @@ def configBuilder(request, endpoint_url, mlist = 'request', body_params = {'tran
         "n": 1, #fixed
         "best_of": 1, #fixed
         "sampler_order": [6, 0, 1, 3, 4, 2, 5],
-        # 'stop': request.json.get('stop'),
-        # 'logit_bias': request.json.get('logit_bias', {}),
         **dry_params,
         **body_params,
     },
@@ -386,7 +381,7 @@ def stream_or_cc(config):
         if error.response and error.response.status_code == 429:
             return jsonify(status=False, error="out of quota"), 400
         else:
-            return jsonify(error=True)
+            return jsonify(status=False, error= error)
 
 def gen_or_cc(config):
     response = requests.post(**config)
@@ -397,6 +392,48 @@ def gen_or_cc(config):
                 response.json().get("choices")[0].get("message")["content"]
             )
         return jsonify(res)
+    else:
+        print("Error occurred:", response.status_code, response.json())
+        return jsonify(status=False, error=response.json()["error"]["message"]), 400
+
+def stream_claude(config):
+    try:
+        print("begin text stream")
+        with requests.post(**config) as response:
+            response.raise_for_status()  # Ensure the request was successful
+            for line in response.iter_lines():
+                if line:
+                    text = line.decode('utf-8')
+                    if text[:5] != "event":
+                        event_str = json.loads(text[5:])
+                        print(event_str)
+                        if "delta" in event_str and "text" in event_str["delta"]:
+                            out = json.dumps({
+                                "choices": [
+                                    {
+                                        "delta": {"role": "assistant", "content": event_str["delta"]["text"]},
+                                    }
+                                ],
+                            })
+                            yield f"data: {out}\n\n"
+                time.sleep(0.02)
+    except Exception as e:
+        return jsonify(status=False, error= e)
+
+def gen_claude(config):
+    response = requests.post(**config)
+    res = response.json()
+    message = ''
+    if response.status_code <= 299:
+        if auto_trim == True:
+            message = autoTrim(res["content"][0]["text"])
+        else:
+            message = res["content"][0]["text"]
+        response = {
+            "choices": [{"message": {"content": message, "role": "assistant"}}],
+            "model": "claude",
+        }
+        return response
     else:
         print("Error occurred:", response.status_code, response.json())
         return jsonify(status=False, error=response.json()["error"]["message"]), 400
@@ -419,82 +456,6 @@ def normalGeneration(config):
     else:
         print("Error occurred:", response.status_code, response.json())
         return jsonify(status=False, error=response.json()["error"]["message"]), 400
-
-def claudeGenerateStuff(request, model):
-    api_key=request.headers.get("Authorization")[7:]
-    api_key=api_key.strip()
-    client = anthropic.Anthropic(api_key=api_key)
-    print(f"key: {api_key}")
-    print("begin text generation")
-    mlist = request.json["messages"]
-    formattedContents = formatToClaude(mlist)
-    temperature = request.json.get("temperature", 0.9)
-    ntop_p = request.json.get("top_p", top_p)
-    ntop_k = request.json.get("top_k", top_k)
-    message = client.messages.create(
-        model=model,
-        max_tokens=request.json.get("max_tokens", 1000),
-        temperature=temperature,
-        top_p=ntop_p,
-        top_k=ntop_k,
-        system=mlist[0]["content"],
-        messages=formattedContents,
-    )
-    if auto_trim == True:
-        message = autoTrim(message.content[0].text)
-    else:
-        message = message.content[0].text
-    response = {
-        "choices": [{"message": {"content": message, "role": "assistant"}}],
-        "created": 1710090350,
-        "id": "gen-uzbdBYNh5cJ7XlE6LNgXXvVSZQba",
-        "model": "anthropic/" + model,
-        "object": "chat.completion",
-        "usage": {
-            "completion_tokens": 268,
-            "prompt_tokens": 1481,
-            "total_tokens": 1749,
-        },
-    }
-    return response
-
-def claudeGenerateStream(request, model):
-    api_key=request.headers.get("Authorization")[7:]
-    api_key=api_key.strip()
-    client = anthropic.Anthropic(api_key=api_key)
-    print("begin text generation")
-    mlist = request.json["messages"]
-    # format openai message to claude
-    formattedContents = formatToClaude(mlist)
-    temperature = request.json.get("temperature", 0.9)
-    with client.messages.stream(
-        model=model,
-        max_tokens=request.json.get("max_tokens", 1000),
-        temperature=temperature,
-        top_p=web_param["top_p"],
-        top_k=web_param["top_k"],
-        system=mlist[0]["content"],
-        messages=formattedContents,
-    ) as stream:
-        for text in stream.text_stream:
-            event_str = json.dumps(
-                {
-                    "id": "claude",
-                    "object": "chat.completion.chunk",
-                    "created": 1,
-                    "model": "claude",
-                    "choices": [
-                        {
-                            "index": 0,
-                            "finish_reason": None,
-                            "delta": {"role": "assistant", "content": text},
-                        }
-                    ],
-                }
-            )
-            # print(event_str)
-            yield f"data: {event_str}\n\n"
-            time.sleep(0.03)
 
 def arliStream(config):
     try:
@@ -558,30 +519,37 @@ def inferStream(config):
             return jsonify(error=True)
 
 def claudeNormalOperation(request, model):
-    if "stream" not in request.json:
-        request.json["stream"] = False
+    endpoint_url = 'https://api.anthropic.com/v1/messages'
+    ## Check if request is empty    
     if not request.json:
         return jsonify(error=True), 400
+    ## Check if this is test message
+    if(request.json["messages"][0]["content"] == "Just say TEST"):
+        return testobj
+    ## Check if Api key valid
+    if not request.headers.get('Authorization'):
+        return jsonify(error=True), 401
+
+    ## Being chat completions, no text
+    config = configBuilder(request, endpoint_url)
+    print(config)
+    for deleteitem in ["repetition_penalty","presence_penalty","frequency_penalty","banned_strings","sampler_order","min_p", "skip_special_tokens", "n", "best_of", "transforms"]:
+        if deleteitem in config["json"]:
+            del config["json"][deleteitem]
+    config["json"]["messages"] = formatToClaude(request.json["messages"])
+    config["headers"] = {
+        "x-api-key": request.headers.get('Authorization')[7:],
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01'
+        }
+    config["json"]["model"] = model
     try:
-        if request.json["stream"] == True:
-            return Response(
-                stream_with_context(claudeGenerateStream(request, model)),
-                content_type="text/event-stream",
-            )
-        response = claudeGenerateStuff(request, model)
-        return jsonify(response)
+        if(config['json']['stream'] == True):
+            return Response(stream_with_context(stream_claude(config)), content_type='text/event-stream')
+        else:
+            return gen_claude(config)
     except Exception as e:
-        returner = {
-                    "message": e.body["error"]["type"]
-                    + " : "
-                    + e.body["error"]["message"],
-                    "type": e.body["error"]["message"],
-                    "code": e.body["error"]["type"],
-                    "body": request.json,
-                }
-        errorlogging(returner)
-        returnmessage = f"{returner['message']}"
-        return Response(returnmessage, status=400)
+        return jsonify(error=e)
 
 ## === Pages ===
 
