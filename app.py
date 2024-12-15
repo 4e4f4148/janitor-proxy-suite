@@ -694,7 +694,7 @@ def handleBaseClaudeRequest():
         pathList = {}
         base_url = request.base_url.replace('http','https')
         for i in claudeModelList:
-            pathList[base_url+i] = claudeModelList[i]
+            pathList[base_url+'/'+i] = claudeModelList[i]
         return pathList
     else:
         if not request.headers.get('Authorization'):
