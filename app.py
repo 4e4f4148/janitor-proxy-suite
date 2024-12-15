@@ -367,81 +367,104 @@ def extract_card_data(messages):
 ## generation function
 
 def stream_or_cc(config):
-    try:
-        print("begin text stream")
-        with requests.post(**config) as response:
-            response.raise_for_status()  # Ensure the request was successful
-            for line in response.iter_lines():
-                if line:
-                    text = line.decode('utf-8')
-                    if(text != ": OPENROUTER PROCESSING"):
-                        yield f"{text}\n\n"
-                    time.sleep(0.02)
-    except requests.exceptions.RequestException as error:
-        if error.response and error.response.status_code == 429:
-            return jsonify(status=False, error="out of quota"), 400
-        else:
-            return jsonify(status=False, error= error)
+    def streamer():
+        try:
+            with requests.post(**config) as response:
+                response.raise_for_status()  # Ensure the request was successful
+                for line in response.iter_lines():
+                    if line:
+                        text = line.decode('utf-8')
+                        if(text != ": OPENROUTER PROCESSING"):
+                            yield f"{text}\n\n"
+                        time.sleep(0.02)
+        except Exception as e:
+            error_message = {"error": str(e)}
+            yield f"data: {json.dumps(error_message)}\n\n"
+    try: 
+        return Response(stream_with_context(streamer()), content_type='text/event-stream')
+    except Exception as e:
+        return Response(
+            json.dumps({"error": str(e)}),
+            status=500,
+            content_type="application/json"
+        )
 
 def gen_or_cc(config):
-    response = requests.post(**config)
-    res = response.json()
-    if response.status_code <= 299:
-        if auto_trim == True:
-            res["choices"][0]["message"]["content"] = autoTrim(
-                response.json().get("choices")[0].get("message")["content"]
-            )
-        return jsonify(res)
-    else:
-        print("Error occurred:", response.status_code, response.json())
-        return jsonify(status=False, error=response.json()["error"]["message"]), 400
+    try:
+        response = requests.post(**config)
+        res = response.json()
+        if response.status_code <= 299:
+            if auto_trim == True:
+                res["choices"][0]["message"]["content"] = autoTrim(
+                    response.json().get("choices")[0].get("message")["content"]
+                )
+            return jsonify(res)
+    except Exception as e:
+        return Response(
+            json.dumps({"error": str(e)}),
+            status=500,
+            content_type="application/json"
+        )
 
 def stream_claude(config):
-    try:
-        print("begin text stream")
-        with requests.post(**config) as response:
-            response.raise_for_status()  # Ensure the request was successful
-            for line in response.iter_lines():
-                if line:
-                    text = line.decode('utf-8')
-                    if text[:5] != "event":
-                        event_str = json.loads(text[5:])
-                        print(event_str)
-                        if "delta" in event_str and "text" in event_str["delta"]:
-                            out = json.dumps({
-                                "choices": [
-                                    {
-                                        "delta": {"role": "assistant", "content": event_str["delta"]["text"]},
-                                    }
-                                ],
-                            })
-                            yield f"data: {out}\n\n"
-                time.sleep(0.02)
+    def streamer():
+        try:
+            with requests.post(**config) as response:
+                response.raise_for_status()  # Ensure the request was successful
+                for line in response.iter_lines():
+                    if line:
+                        text = line.decode('utf-8')
+                        if text[:5] != "event":
+                            event_str = json.loads(text[5:])
+                            print(event_str)
+                            if "delta" in event_str and "text" in event_str["delta"]:
+                                out = json.dumps({
+                                    "choices": [
+                                        {
+                                            "delta": {"role": "assistant", "content": event_str["delta"]["text"]},
+                                        }
+                                    ],
+                                })
+                                yield f"data: {out}\n\n"
+                    time.sleep(0.02)
+        except Exception as e:
+            error_message = {"error": str(e)}
+            yield f"data: {json.dumps(error_message)}\n\n"
+    try: 
+        return Response(stream_with_context(streamer()), content_type='text/event-stream')
     except Exception as e:
-        return jsonify(status=False, error= e)
+        return Response(
+            json.dumps({"error": str(e)}),
+            status=500,
+            content_type="application/json"
+        )
 
 def gen_claude(config):
-    response = requests.post(**config)
-    res = response.json()
-    message = ''
-    if response.status_code <= 299:
-        if auto_trim == True:
-            message = autoTrim(res["content"][0]["text"])
-        else:
-            message = res["content"][0]["text"]
-        response = {
-            "choices": [{"message": {"content": message, "role": "assistant"}}],
-            "model": "claude",
-        }
-        return response
-    else:
-        print("Error occurred:", response.status_code, response.json())
-        return jsonify(status=False, error=response.json()["error"]["message"]), 400
+    try:
+        response = requests.post(**config)
+        res = response.json()
+        message = ''
+        if response.status_code <= 299:
+            if auto_trim == True:
+                message = autoTrim(res["content"][0]["text"])
+            else:
+                message = res["content"][0]["text"]
+            response = {
+                "choices": [{"message": {"content": message, "role": "assistant"}}],
+                "model": "claude",
+            }
+            return response
+    except Exception as e:
+        return Response(
+                json.dumps({"error": str(e)}),
+                status=500,
+                content_type="application/json"
+            )
 
 def normalGeneration(config):
-    response = requests.post(**config)
-    drum = response.json()
-    if response.status_code <= 299:
+    try:
+        response = requests.post(**config)
+        drum = response.json()
         if auto_trim == True:
             drum["choices"][0]["message"] = {
                 "role": "assistant",
@@ -453,70 +476,79 @@ def normalGeneration(config):
                 "content": drum["choices"][0].get("text"),
                 }
         return jsonify(drum),200
-    else:
-        print("Error occurred:", response.status_code, response.json())
-        return jsonify(status=False, error=response.json()["error"]["message"]), 400
+    except Exception as e:
+        return Response(
+            json.dumps({"error": str(e)}),
+            status=500,
+            content_type="application/json"
+        )
 
-def arliStream(config):
-    try:
-        print("begin text stream")
-        with requests.post(**config, stream=True) as response:
-            response.raise_for_status()  # Ensure the request was successful
-            for line in response.iter_lines():
-                if line:
-                    # Decode the line and yield as a server-sent event
-                    text = line.decode('utf-8')
-                    # print(text)
-                    if text != "data: [DONE]":
-                        newtext = json.loads(text[6:])
-                        if("choices" in newtext):
-                            newtext["choices"][0]["delta"] = {
-                                "content" : newtext["choices"][0]["text"]
-                            }
-                        else:
-                          print(text)
-                        text = "data: " + json.dumps(newtext)
-                    yield f"{text}\n\n"
-                    # Sleep for 2 seconds before sending the next message
-                    time.sleep(0.02)
-    except requests.exceptions.RequestException as error:
-        if error.response and error.response.status_code == 429:
-            print(error.response)
-            return jsonify(status=False, error="out of quota"), 400
-        else:
-            print(error)
-            return jsonify(error=True)
+def stream_arli(config):
+    def streamer():
+        try:
+            print("begin text stream")
+            with requests.post(**config, stream=True) as response:
+                response.raise_for_status()  # Ensure the request was successful
+                for line in response.iter_lines():
+                    if line:
+                        # Decode the line and yield as a server-sent event
+                        text = line.decode('utf-8')
+                        # print(text)
+                        if text != "data: [DONE]":
+                            newtext = json.loads(text[6:])
+                            if("choices" in newtext):
+                                newtext["choices"][0]["delta"] = {
+                                    "content" : newtext["choices"][0]["text"]
+                                }
+                            else:
+                                print(text)
+                            text = "data: " + json.dumps(newtext)
+                        yield f"{text}\n\n"
+                        # Sleep for 2 seconds before sending the next message
+                        time.sleep(0.02)
+        except Exception as e:
+            error_message = {"error": str(e)}
+            yield f"data: {json.dumps(error_message)}\n\n"
+    try: 
+        return Response(stream_with_context(streamer()), content_type='text/event-stream')
+    except Exception as e:
+        return Response(
+            json.dumps({"error": str(e)}),
+            status=500,
+            content_type="application/json"
+        )
 
-def inferStream(config):
-    try:
-        print("begin text stream")
-        with requests.post(**config, stream=True) as response:
-            response.raise_for_status()  # Ensure the request was successful
-            for line in response.iter_lines():
-                if line:
-                    # Decode the line and yield as a server-sent event
-                    text = line.decode('utf-8')
-                    # print(text)
-                    if text != "data: [DONE]":
-                        newtext = json.loads(text[6:])
-                        if("choices" in newtext):
-                          if("finish_reason" not in newtext["choices"][0]):
-                              newtext["choices"][0]["delta"] = {
-                                  "content" : newtext["choices"][0]["text"]
-                              }
-                        else:
-                          print(text)
-                        text = "data: " + json.dumps(newtext)
-                    yield f"{text}\n\n"
-                    # Sleep for 2 seconds before sending the next message
-                    time.sleep(0.02)
-    except requests.exceptions.RequestException as error:
-        if error.response and error.response.status_code == 429:
-            print(error.response)
-            return jsonify(status=False, error="out of quota"), 400
-        else:
-            print(error)
-            return jsonify(error=True)
+def stream_infer(config):
+    def streamer():
+        try:
+            with requests.post(**config, stream=True) as response:
+                response.raise_for_status()  # Ensure the request was successful
+                for line in response.iter_lines():
+                    if line:
+                        text = line.decode('utf-8')
+                        if text != "data: [DONE]":
+                            newtext = json.loads(text[6:])
+                            if("choices" in newtext):
+                                if("finish_reason" not in newtext["choices"][0]):
+                                    newtext["choices"][0]["delta"] = {
+                                        "content" : newtext["choices"][0]["text"]
+                                    }
+                            else:
+                                print(text)
+                            text = "data: " + json.dumps(newtext)
+                        yield f"{text}\n\n"
+                        time.sleep(0.02)
+        except Exception as e:
+            error_message = {"error": str(e)}
+            yield f"data: {json.dumps(error_message)}\n\n"
+    try: 
+        return Response(stream_with_context(streamer()), content_type='text/event-stream')
+    except Exception as e:
+        return Response(
+            json.dumps({"error": str(e)}),
+            status=500,
+            content_type="application/json"
+        )
 
 def claudeNormalOperation(request, model):
     endpoint_url = 'https://api.anthropic.com/v1/messages'
@@ -545,7 +577,7 @@ def claudeNormalOperation(request, model):
     config["json"]["model"] = model
     try:
         if(config['json']['stream'] == True):
-            return Response(stream_with_context(stream_claude(config)), content_type='text/event-stream')
+            return stream_claude(config)
         else:
             return gen_claude(config)
     except Exception as e:
@@ -647,7 +679,7 @@ def handleOpenrouterChatCompletions():
     config["json"]["messages"] = request.json["messages"]
     try:
         if(config['json']['stream'] == True):
-            return Response(stream_with_context(stream_or_cc(config)), content_type='text/event-stream')
+            return stream_or_cc(config)
         else:
             return gen_or_cc(config)
     except requests.exceptions.RequestException as error:
@@ -689,7 +721,7 @@ def handleArliRequest():
         config['json']['prompt'] = formattedMessage
         print(config)
         if body.get("stream", False) == True:
-            return Response(stream_with_context(arliStream(config)), content_type='text/event-stream')
+            return stream_arli(config)
         else:
             return normalGeneration(config)
 
@@ -710,7 +742,7 @@ def handleInferRequest():
         del config['json']['sampler_order']
 
         if body.get("stream", False) == True:
-            return Response(stream_with_context(inferStream(config)), content_type='text/event-stream')
+            return stream_infer(config)
         else:
             return normalGeneration(config)
 
@@ -728,7 +760,7 @@ def handleFeatherlessRequest():
         config['json']['prompt'] = formattedMessage
         print(config)
         if body.get("stream", False) == True:
-            return Response(stream_with_context(arliStream(config)), content_type='text/event-stream')
+            return stream_arli(config)
         else:
             return normalGeneration(config)
 
@@ -747,7 +779,7 @@ def handleKoboldRequest():
         global card_data
         card_data = extract_card_data(body["messages"])
         if body.get("stream", False) == True:
-            return Response(stream_with_context(inferStream(config)), content_type='text/event-stream')
+            return stream_infer(config)
         else:
             return normalGeneration(config)
 
