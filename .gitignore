@@ -1,3 +1,4 @@
 /package
 /.venv
 cloudflared.exe
+cloudflared-linux-amd64
