@@ -120,7 +120,7 @@ auto_trim = True
 
 ## === Utils ===
 
-def messageFlattener(messages_list, preset=web_param['instruct']):
+def messageInstructor(messages_list, preset=web_param['instruct']):
     adapter_obj = premade_instruct[web_param['instruct']]
     #define adapter
     system_message_start = adapter_obj.get("system_start", "\n### Instruction:\n")
@@ -280,24 +280,17 @@ def extract_card_data(messages):
     content0 = messages[0]["content"]
     content1 = messages[1]["content"]
 
-    # Extract user and character names:
-    # User name from first occurrence of "'s Persona:"
     user_name = extract_persona_name(content0, 0)
-    # Character name from second occurrence of "'s Persona:"
     char_name = extract_persona_name(content0, 1)
 
-    # Now extract description, scenario, mes_example based on previously implemented logic
     persona_matches = list(re.finditer(r"'s Persona:", content0))
     if len(persona_matches) < 2:
-        # Not enough occurrences for char_name-based extraction
-        # Set defaults and do only user replacements if user_name found
         name = char_name  # might be empty if not found
         description = ""
         scenario = ""
         mes_example = ""
     else:
         second_persona_idx = persona_matches[1].start()
-        # The char_name we got is from second occurrence line_text
         name = char_name
 
         start_desc = second_persona_idx + len("'s Persona:")
@@ -328,7 +321,6 @@ def extract_card_data(messages):
         if example_marker:
             example_start = example_marker.start()
             raw_example_str = remaining[example_start:].lstrip()
-            # Remove the prefix line up to the colon
             colon_idx = raw_example_str.find(':')
             if colon_idx != -1:
                 mes_example = raw_example_str[colon_idx+1:].strip()
@@ -346,17 +338,11 @@ def extract_card_data(messages):
         "mes_example": mes_example,
         "scenario": scenario
     }
-
-    # Perform replacements of user and char names:
-    # Replace user_name with {{user}}
-    # Replace char_name with {{char}}
-    # Only do replacements if the respective names are not empty
     def safe_replace(text, old, new):
         return text.replace(old, new) if old else text
 
     for field in card_data:
         if field != "name":  # Exclude the "name" field
-          # Replace user first, then char
           val = card_data[field]
           val = safe_replace(val, user_name, "{{user}}")
           val = safe_replace(val, char_name, "{{char}}")
@@ -491,9 +477,7 @@ def stream_arli(config):
                 response.raise_for_status()  # Ensure the request was successful
                 for line in response.iter_lines():
                     if line:
-                        # Decode the line and yield as a server-sent event
                         text = line.decode('utf-8')
-                        # print(text)
                         if text != "data: [DONE]":
                             newtext = json.loads(text[6:])
                             if("choices" in newtext):
@@ -504,7 +488,6 @@ def stream_arli(config):
                                 print(text)
                             text = "data: " + json.dumps(newtext)
                         yield f"{text}\n\n"
-                        # Sleep for 2 seconds before sending the next message
                         time.sleep(0.02)
         except Exception as e:
             error_message = {"error": str(e)}
@@ -564,7 +547,6 @@ def claudeNormalOperation(request, model):
 
     ## Being chat completions, no text
     config = configBuilder(request, endpoint_url)
-    print(config)
     for deleteitem in ["repetition_penalty","presence_penalty","frequency_penalty","banned_strings","sampler_order","min_p", "skip_special_tokens", "n", "best_of", "transforms"]:
         if deleteitem in config["json"]:
             del config["json"][deleteitem]
@@ -610,8 +592,6 @@ def paramcheck():
 def setting():
     if request.method == 'POST':
         global web_param
-        # for i in request.form:
-        #     web_param[i] = request.form[i]
         web_param["instruct"] = request.form['instruct']
         web_param["top_p"] = eval(request.form['top_p'])
         web_param["min_p"] = eval(request.form['min_p'])
@@ -662,18 +642,9 @@ def handleOpenrouterChatCompletions():
     if request.method == 'GET':
         return "This link is not meant to be open. Use this as api url"
     endpoint_url = 'https://openrouter.ai/api/v1/chat/completions'
-    ## Check if request is empty    
-    if not request.json:
-        return jsonify(error=True), 400
-    ## Check if this is test message
-    
     if(request.json["messages"][0]["content"] == "Just say TEST"):
         return testobj
-    ## Check if Api key valid
-    if not request.headers.get('Authorization'):
-        return jsonify(error=True), 401
 
-    ## Being chat completions, no text
     config = configBuilder(request, endpoint_url)
     print(config)
     config["json"]["messages"] = request.json["messages"]
@@ -697,14 +668,10 @@ def handleBaseClaudeRequest():
             pathList[base_url+'/'+i] = claudeModelList[i]
         return pathList
     else:
-        if not request.headers.get('Authorization'):
-            return jsonify(error=True), 401
         return claudeNormalOperation(request, request.json["model"])
 
 @app.route('/claude/<model>', methods=['POST'])
 def handleClaudeRequest(model):
-    if not request.headers.get('Authorization'):
-            return jsonify(error=True), 401
     return claudeNormalOperation(request , claudeModelList[model] if model in claudeModelList else request.json["model"])
 
 @app.route('/arli', methods=['GET','POST'])
@@ -712,11 +679,9 @@ def handleArliRequest():
     if request.method == 'GET':
         return "This link is not meant to be open. Use this as api url"
     else:
-        if not request.headers.get('Authorization'):
-            return jsonify(error=True), 401
         body = request.json
         endpoint_url = "https://api.arliai.com/v1/completions"
-        formattedMessage = messageFlattener(body["messages"])
+        formattedMessage = messageInstructor(body["messages"])
         config = configBuilder(request, endpoint_url, formattedMessage)
         config['json']['prompt'] = formattedMessage
         print(config)
@@ -734,10 +699,10 @@ def handleInferRequest():
             return jsonify(error=True), 401
         body = request.json
         endpoint_url = "https://api.totalgpt.ai/v1/completions"
-        formattedMessage = messageFlattener(body["messages"])
+        formattedMessage = messageInstructor(body["messages"])
         config = configBuilder(request, endpoint_url, formattedMessage, {})
         config['json']['prompt'] = formattedMessage
-        ## not support banned string
+        ## not support banned string, sampler order
         del config['json']['banned_strings']
         del config['json']['sampler_order']
 
@@ -755,7 +720,7 @@ def handleFeatherlessRequest():
             return jsonify(error=True), 401
         body = request.json
         endpoint_url = "https://api.featherless.ai/v1/completions"
-        formattedMessage = messageFlattener(body["messages"])
+        formattedMessage = messageInstructor(body["messages"])
         config = configBuilder(request, endpoint_url, formattedMessage, {})
         config['json']['prompt'] = formattedMessage
         print(config)
@@ -782,7 +747,6 @@ def handleKoboldRequest():
             return stream_infer(config)
         else:
             return normalGeneration(config)
-
 
 if __name__ == '__main__':
     app.run(port=PORT)
